@@ -474,6 +474,7 @@ tr[style*="background:#f0fdf4"]:hover td{background:#dcfce7!important;}
 <div class="fb-banner sticky-nav" style="top:67px;">
   <span><span class="fb-dot wait" id="fb-dot"></span><span id="fb-status">⏳ Conectando...</span></span>
   <span id="fb-last" style="opacity:.8;font-size:.69rem;"></span>
+  <span id="fb-users-count" style="opacity:.9;font-size:.69rem;background:rgba(255,255,255,.15);border-radius:10px;padding:1px 8px;"></span>
   <button onclick="fbSync()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:3px 10px;font-size:.72rem;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;">🔄 Sincronizar</button>
 </div>
 
@@ -1190,7 +1191,10 @@ function buildForm(tab){
         </div>
         <button class="pbtn" id="${tab}-scan-btn" onclick="openBarcodeScanner('${tab}')" style="background:#0369a1;margin-top:6px;"><span class="ic">📲</span> Escanear Código</button>
         <div class="pp pp-f1" id="${tab}-p1" title="Click para OCR Lens"></div>
-        <div id="${tab}-s1" style="font-size:.75rem;color:#888;margin-top:4px;"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+          <div id="${tab}-s1" style="font-size:.75rem;color:#888;flex:1;"></div>
+          <button class="btn bd sm" id="${tab}-p1-del" style="display:none;font-size:.65rem;padding:2px 7px;" onclick="discardFoto1('${tab}')" title="Quitar Foto 1"><span class="ic">✕</span> Quitar</button>
+        </div>
       </div>
       <div class="pb">
         <label>📸 Foto del Producto / Novedad</label>
@@ -1429,7 +1433,36 @@ function nextF2(){const st=CS[2];if(st.idx>=st.pend.length)return;st.file=st.pen
 // ─────────────────────────────────────────────
 // FOTO 1 — OCR + BARCODE
 // ─────────────────────────────────────────────
-let _ocrSrc='', _ocrTab='';  // fuente de imagen y tab activo del OCR
+let _ocrSrc='', _ocrTab='';
+
+function discardFoto1(tab){
+  const prev=document.getElementById(tab+'-p1');
+  const status=document.getElementById(tab+'-s1');
+  const delBtn=document.getElementById(tab+'-p1-del');
+  const inp=document.getElementById(tab+'-f1');
+  if(prev) prev.innerHTML='';
+  if(status) status.textContent='';
+  if(delBtn) delBtn.style.display='none';
+  if(inp) inp.value='';
+  _ocrSrc='';
+  showT('✕ Foto 1 descartada');
+}
+
+function discardF2Photo(tab,idx){
+  f2u.splice(idx,1);
+  const prev=document.getElementById(tab+'-p2');
+  if(!prev) return;
+  prev.innerHTML='';
+  f2u.forEach((src,i)=>{
+    const wrap=document.createElement('div');
+    wrap.className='foto-thumb'+(i===0?' principal':'');
+    wrap.innerHTML=`<img src="${src}" style="height:${i===0?70:55}px;cursor:pointer;" onclick="openGalLB(${i},'form-${tab}')"><button class="del-btn" onclick="discardF2Photo('${tab}',${i})" title="Quitar">✕</button>`;
+    prev.appendChild(wrap);
+  });
+  const ab=document.getElementById(tab+'-f2-addbtns');
+  if(ab) ab.style.display=f2u.length?'flex':'none';
+  showT('✕ Foto eliminada');
+}  // fuente de imagen y tab activo del OCR
 
 function procF1(tab,file,dataUrl,rawData){
   const prev   = document.getElementById(tab+'-p1');
@@ -1458,15 +1491,19 @@ function procF1(tab,file,dataUrl,rawData){
       if(nums && nums.length>0){
         const ei = document.querySelector('#'+tab+'-el .ei');
         if(ei && !ei.value) ei.value = nums[0];
-        status.innerHTML = `✅ Código detectado: <strong>${nums[0]}</strong> · <span style="color:#0369a1;cursor:pointer;" onclick="openOcr('${src}','${tab}')">🔍 Abrir OCR Lens</span>`;
+        if(document.getElementById(tab+'-p1-del'))document.getElementById(tab+'-p1-del').style.display='inline-flex';
+  status.innerHTML = `✅ Código detectado: <strong>${nums[0]}</strong> · <span style="color:#0369a1;cursor:pointer;" onclick="openOcr('${src}','${tab}')">🔍 Abrir OCR Lens</span>`;
       } else {
-        status.innerHTML = `✅ Foto cargada · <span style="color:#0369a1;cursor:pointer;" onclick="openOcr('${src}','${tab}')">🔍 Abrir OCR Lens para leer texto</span>`;
+        if(document.getElementById(tab+'-p1-del'))document.getElementById(tab+'-p1-del').style.display='inline-flex';
+  status.innerHTML = `✅ Foto cargada · <span style="color:#0369a1;cursor:pointer;" onclick="openOcr('${src}','${tab}')">🔍 Abrir OCR Lens para leer texto</span>`;
       }
     }).catch(()=>{
-      status.innerHTML = `⚠️ Error OCR · <span style="color:#0369a1;cursor:pointer;" onclick="openOcr('${src}','${tab}')">🔍 Abrir OCR Lens</span>`;
+      if(document.getElementById(tab+'-p1-del'))document.getElementById(tab+'-p1-del').style.display='inline-flex';
+  status.innerHTML = `⚠️ Error OCR · <span style="color:#0369a1;cursor:pointer;" onclick="openOcr('${src}','${tab}')">🔍 Abrir OCR Lens</span>`;
     });
   } else {
-    status.innerHTML = `📷 Foto cargada · <span style="color:#0369a1;cursor:pointer;" onclick="openOcr('${src}','${tab}')">🔍 Abrir OCR Lens</span>`;
+    if(document.getElementById(tab+'-p1-del'))document.getElementById(tab+'-p1-del').style.display='inline-flex';
+  status.innerHTML = `📷 Foto cargada · <span style="color:#0369a1;cursor:pointer;" onclick="openOcr('${src}','${tab}')">🔍 Abrir OCR Lens</span>`;
   }
 }
 
@@ -1756,6 +1793,18 @@ function addMorePhotos(tab,id,inp){
   inp.value='';
 }
 
+function discardRecPhoto(tab,id,idx){
+  const rec=R[tab]?.find(r=>String(r.id)===id);
+  if(!rec||!rec.foto2) return;
+  rec.foto2.splice(idx,1);
+  sR();
+  if(tab==='rt') renderRT();
+  else if(tab==='dg') renderDG();
+  else if(tab==='rs') renderRS();
+  else renderREQ();
+  showT('✕ Foto eliminada del registro');
+}
+
 function clearFotos(tab,id){
   if(!confirm('¿Eliminar todas las fotos de este registro?'))return;
   const rec=R[tab]?.find(r=>String(r.id)===id);
@@ -1834,6 +1883,8 @@ function doSave(){
     motivo:document.getElementById(tab+'-mot').value.trim(),
     decision:dec,
     observaciones:document.getElementById(tab+'-obs').value.trim(),
+    tablaAsignacion:tab==='dg'?(document.getElementById(tab+'-tasig')?.value?.trim()||''):'',
+    pedidoTraslado:tab==='dg'?(document.getElementById(tab+'-ptras')?.value?.trim()||''):'',
     eans:eans.length>0?eans:[{ean:'',cantidad:'',pvp:''}],
     foto2:[...f2u],
     fecha:new Date().toLocaleString('es-EC'),
@@ -1861,7 +1912,7 @@ function doSave(){
   }
 }
 function clearF(tab){
-  ['sem','tie','div67','dpto','cod','pv','ref','si','mot','obs'].forEach(f=>{
+  ['sem','tie','div67','dpto','cod','pv','ref','si','mot','obs','tasig','ptras'].forEach(f=>{
     const el=document.getElementById(tab+'-'+f);if(el)el.value='';
   });
   const areaEl=document.getElementById(tab+'-area');if(areaEl)areaEl.value='';
@@ -1872,6 +1923,7 @@ function clearF(tab){
   [tab+'-f1',tab+'-f2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const pm=document.getElementById(tab+'-pm');if(pm)pm.textContent='';
   _ocrSrc=''; _ocrTab='';
+  const _db1=document.getElementById(tab+'-p1-del');if(_db1)_db1.style.display='none';
   f2u=[];
   const elList=document.getElementById(tab+'-el');
   if(elList) elList.innerHTML=`<div class="er" data-i="0">
@@ -1929,8 +1981,10 @@ function doSaveWk(){
 function sortR(data){
   return[...data].sort((a,b)=>{
     const ai=STORES.indexOf(a.tienda),bi=STORES.indexOf(b.tienda);
-    if(ai!==bi)return ai-bi;
-    return(a.dpto||'').localeCompare(b.dpto||'');
+    if(ai!==bi) return(ai===-1?999:ai)-(bi===-1?999:bi);
+    const dCmp=(a.dpto||'').localeCompare(b.dpto||'');
+    if(dCmp!==0) return dCmp;
+    return(a.codigo||'').localeCompare(b.codigo||'');
   });
 }
 function fPVP(e){return e.pvp?'$'+parseFloat(e.pvp).toFixed(2):'';}
@@ -1963,6 +2017,7 @@ function mkRow(rec,ean,ei,rn,tabKey){
       const isPrinc=fi===0;
       return`<div class="foto-thumb${isPrinc?' principal':''}">
         <img src="${src}" style="height:${isPrinc?70:55}px;cursor:pointer;" onclick="openGalLB(${fi},'rec-${rId}')" title="${isPrinc?'⭐ Principal — click para ver':'Click para ver galería'}">
+        <button class="del-btn" onclick="discardRecPhoto('${tabKey}','${rId}',${fi})" title="Quitar foto">✕</button>
       </div>`;
     }).join('')+'</div>';
   }
@@ -1984,6 +2039,7 @@ function mkRow(rec,ean,ei,rn,tabKey){
     <td><textarea class="ie-t" oninput="eF('${tabKey}','${rid}','motivo',this.value)" style="width:108px;">${esc(rec.motivo)}</textarea></td>
     <td><select class="ie-s" onchange="eDec('${tabKey}','${rid}',this.value)" style="width:110px;">${decSelOpts(rec.decision)}</select></td>
     <td><textarea class="ie-t" oninput="eF('${tabKey}','${rid}','observaciones',this.value)" style="width:108px;">${esc(rec.observaciones)}</textarea></td>
+    ${tabKey==='dg'?`<td><input class="ie" value="${esc(rec.tablaAsignacion||'')}" oninput="eF('dg','${rid}','tablaAsignacion',this.value)" style="width:110px;" placeholder="Tabla Asig."></td><td><input class="ie" value="${esc(rec.pedidoTraslado||'')}" oninput="eF('dg','${rid}','pedidoTraslado',this.value)" style="width:100px;" placeholder="# Pedido"></td>`:''}
     <td>
       ${f2html}
       <div style="margin-top:4px;display:flex;gap:3px;flex-wrap:wrap;">
@@ -2015,6 +2071,7 @@ function mkRowCopy(rec, ean, ei, rn){
       const isPrinc=fi===0;
       return`<div class="foto-thumb${isPrinc?' principal':''}">
         <img src="${src}" style="height:${isPrinc?70:55}px;cursor:pointer;" onclick="openGalLB(${fi},'rec-${rId2}')" title="${isPrinc?'⭐ Principal':'Ver galería'}">
+        <button class="del-btn" onclick="discardRecPhoto('rt','${rId2}',${fi})" title="Quitar foto">✕</button>
       </div>`;
     }).join('')+'</div>';
   }
@@ -2199,14 +2256,17 @@ function exportXLTienda(){
   if(t==='orig'){ exportXL('rt'); return; }
   const data = R.rt.filter(r => r._copy && r.tienda === t);
   if(!data.length){ showT('⚠️ Sin datos para exportar'); return; }
+  const _dgCols=mode==='dg'?['Tabla Asignación','# Ped. Traslado']:[];
   const hdr=['#','Semana','Tienda','DPTO','Código','Proveedor','REF','Sem.Ingreso',
-    'EAN/SKU','Cantidad','PVP s/IVA','PVP Total','Motivo','Decisión','Observaciones','Fecha'];
+    'EAN/SKU','Cantidad','PVP s/IVA','PVP Total','Motivo','Decisión','Observaciones',..._dgCols,'Fecha'];
   const rows=[hdr]; let rn=0;
   sortR(data).forEach(rec=>(rec.eans||[]).forEach(ean=>{
     rn++; const tot=(parseFloat(ean.cantidad)||0)*(parseFloat(ean.pvp)||0);
     rows.push([rn,rec.semana,rec.tienda,rec.dpto||'',rec.codigo||'',rec.proveedor||'',rec.ref||'',rec.semIngreso||'',
       ean.ean||'',ean.cantidad||'',fPVP(ean).replace('$',''),tot?'$'+tot.toFixed(2):'',
-      rec.motivo||'',rec.decision||'',rec.observaciones||'',rec.fecha||'']);
+      rec.motivo||'',rec.decision||'',rec.observaciones||'',
+      ...(mode==='dg'?[rec.tablaAsignacion||'',rec.pedidoTraslado||'']:[]),
+      rec.fecha||'']);
   }));
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet(rows);
@@ -3124,24 +3184,57 @@ function fbSetStatus(state,msg,last){
 }
 function toFbObj(arr){const o={};arr.forEach(r=>{if(r&&r.id)o[r.id]=r;});return o;}
 
+let _fbInitDone = false; // evitar re-renders duplicados en carga inicial
+
 function loadStorage(){
   fbSetStatus('wait','⏳ Cargando...');
   try{CUSTOM_STORES=JSON.parse(localStorage.getItem('dcs')||'[]');}catch(e){CUSTOM_STORES=[];}
   CUSTOM_STORES.forEach(s=>{if(!STORES.includes(s))STORES.push(s);});
   renderCustomStoresList();
-  REF_R.once('value').then(snap=>{
+
+  // ── TIEMPO REAL: REF_R.on('value') — se dispara en cada cambio remoto ──
+  REF_R.on('value', snap=>{
     const val=snap.val();
     if(val){R.rt=val.rt?Object.values(val.rt):[];R.dg=val.dg?Object.values(val.dg):[];R.rs=val.rs?Object.values(val.rs):[];R.req=val.req?Object.values(val.req):[];}
     else{R={rt:[],dg:[],rs:[],req:[]};}
-    renderRT();renderDG();renderRS();renderREQ();updateBell();
-    fbSetStatus('ok','✅ Conectado',new Date().toLocaleString('es-EC'));
-  }).catch(()=>{
+    try{localStorage.setItem('dr',JSON.stringify(R));}catch(e){}
+    // Sólo re-renderizar pestañas visibles para no interrumpir edición
+    const spRt=document.getElementById('sp-rt'),spDg=document.getElementById('sp-dg'),spRs=document.getElementById('sp-rs');
+    if(!spRt||spRt.style.display!=='none') renderRT();
+    if(!spDg||spDg.style.display!=='none') renderDG();
+    if(!spRs||spRs.style.display!=='none') renderRS();
+    renderREQ();updateBell();
+    const now=new Date().toLocaleString('es-EC');
+    if(!_fbInitDone){fbSetStatus('ok','✅ En línea',now);_fbInitDone=true;}
+    else{fbSetStatus('ok','🔄 Actualizado',now);}
+  }, err=>{
+    // Fallback local si no hay conexión
     try{R=JSON.parse(localStorage.getItem('dr')||'{"rt":[],"dg":[],"rs":[],"req":[]}');}catch(e){R={rt:[],dg:[],rs:[],req:[]};}
     renderRT();renderDG();renderRS();renderREQ();updateBell();
     fbSetStatus('err','⚠️ Sin conexión — datos locales','');
   });
-  REF_WK.once('value').then(snap=>{const val=snap.val();WK=val?Object.values(val):[];}).catch(()=>{try{WK=JSON.parse(localStorage.getItem('dw')||'[]');}catch(e){WK=[];}});
+
+  // Semanas: tiempo real
+  REF_WK.on('value', snap=>{
+    const val=snap.val();WK=val?Object.values(val):[];
+    try{localStorage.setItem('dw',JSON.stringify(WK));}catch(e){}
+    const cons=document.getElementById('mp-cons');
+    if(cons&&cons.style.display!=='none') renderConsWeeks();
+  }, ()=>{try{WK=JSON.parse(localStorage.getItem('dw')||'[]');}catch(e){WK=[];}});
+
+  // Proveedores: solo una vez (no cambian frecuente)
   REF_PV.once('value').then(snap=>{const val=snap.val();PV=val||{};const pc=Object.keys(PV).length;if(pc){const el=document.getElementById('pst');if(el)el.textContent='✅ '+pc+' proveedores';}}).catch(()=>{try{PV=JSON.parse(localStorage.getItem('dp')||'{}');}catch(e){PV={};}});
+
+  // Presencia: mostrar usuarios activos
+  const DEV_ID=localStorage.getItem('dep_dev_id')||(()=>{const id='u_'+Math.random().toString(36).slice(2,7);localStorage.setItem('dep_dev_id',id);return id;})();
+  const presRef=db.ref('presence/'+DEV_ID);
+  presRef.set({ts:Date.now(),ua:navigator.userAgent.slice(0,30)});
+  window.addEventListener('beforeunload',()=>presRef.remove());
+  db.ref('presence').on('value',snap=>{
+    const n=Object.keys(snap.val()||{}).length;
+    const el=document.getElementById('fb-users-count');
+    if(el)el.textContent=n>1?`👥 ${n} usuarios en línea`:'';
+  });
 }
 function sR(){
   const now=new Date().toLocaleString('es-EC');
@@ -3152,6 +3245,8 @@ function sR(){
 function sW(){REF_WK.set(toFbObj(WK)).catch(()=>{try{localStorage.setItem('dw',JSON.stringify(WK));}catch(e){}});}
 function fbSync(){
   fbSetStatus('wait','⏳ Sincronizando...');
+  // Con on('value') los datos ya se actualizan automáticamente.
+  // Forzamos una lectura puntual para confirmar y mostrar toast.
   REF_R.once('value').then(snap=>{
     const val=snap.val();
     if(val){R.rt=val.rt?Object.values(val.rt):[];R.dg=val.dg?Object.values(val.dg):[];R.rs=val.rs?Object.values(val.rs):[];R.req=val.req?Object.values(val.req):[];}
