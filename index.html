@@ -3184,76 +3184,128 @@ function fbSetStatus(state,msg,last){
 }
 function toFbObj(arr){const o={};arr.forEach(r=>{if(r&&r.id)o[r.id]=r;});return o;}
 
-let _fbInitDone = false; // evitar re-renders duplicados en carga inicial
+// ─────────────────────────────────────────────
+// FIREBASE SYNC — Escritura granular + tiempo real
+// ─────────────────────────────────────────────
+
+// ID único de esta sesión (para ignorar propios cambios en el listener)
+const _SESSION_ID = Math.random().toString(36).slice(2);
+let _writing = false;       // flag: estamos escribiendo nosotros mismos
+let _writeTimer = null;     // debounce timer para escrituras
+let _fbReady = false;       // Firebase conectado
 
 function loadStorage(){
-  fbSetStatus('wait','⏳ Cargando...');
+  fbSetStatus('wait','⏳ Conectando...');
   try{CUSTOM_STORES=JSON.parse(localStorage.getItem('dcs')||'[]');}catch(e){CUSTOM_STORES=[];}
   CUSTOM_STORES.forEach(s=>{if(!STORES.includes(s))STORES.push(s);});
   renderCustomStoresList();
 
-  // ── TIEMPO REAL: REF_R.on('value') — se dispara en cada cambio remoto ──
+  // ── Cargar datos locales de inmediato (mientras conecta) ──────────────────
+  try{R=JSON.parse(localStorage.getItem('dr')||'{"rt":[],"dg":[],"rs":[],"req":[]}');}catch(e){R={rt:[],dg:[],rs:[],req:[]};}
+  try{WK=JSON.parse(localStorage.getItem('dw')||'[]');}catch(e){WK=[];}
+  renderRT();renderDG();renderRS();renderREQ();updateBell();
+
+  // ── LISTENER TIEMPO REAL — recibe cambios de TODOS los dispositivos ───────
   REF_R.on('value', snap=>{
-    const val=snap.val();
-    if(val){R.rt=val.rt?Object.values(val.rt):[];R.dg=val.dg?Object.values(val.dg):[];R.rs=val.rs?Object.values(val.rs):[];R.req=val.req?Object.values(val.req):[];}
-    else{R={rt:[],dg:[],rs:[],req:[]};}
+    const val = snap.val();
+    const newR = {
+      rt:  val?.rt  ? Object.values(val.rt)  : [],
+      dg:  val?.dg  ? Object.values(val.dg)  : [],
+      rs:  val?.rs  ? Object.values(val.rs)  : [],
+      req: val?.req ? Object.values(val.req) : []
+    };
+
+    // Si nosotros acabamos de escribir, ignorar para no interrumpir edición
+    if(_writing){ _fbReady=true; fbSetStatus('ok','✅ En línea',new Date().toLocaleTimeString('es-EC')); return; }
+
+    // Actualizar estado global
+    R = newR;
     try{localStorage.setItem('dr',JSON.stringify(R));}catch(e){}
-    // Sólo re-renderizar pestañas visibles para no interrumpir edición
-    const spRt=document.getElementById('sp-rt'),spDg=document.getElementById('sp-dg'),spRs=document.getElementById('sp-rs');
-    if(!spRt||spRt.style.display!=='none') renderRT();
-    if(!spDg||spDg.style.display!=='none') renderDG();
-    if(!spRs||spRs.style.display!=='none') renderRS();
-    renderREQ();updateBell();
-    const now=new Date().toLocaleString('es-EC');
-    if(!_fbInitDone){fbSetStatus('ok','✅ En línea',now);_fbInitDone=true;}
-    else{fbSetStatus('ok','🔄 Actualizado',now);}
-  }, err=>{
-    // Fallback local si no hay conexión
-    try{R=JSON.parse(localStorage.getItem('dr')||'{"rt":[],"dg":[],"rs":[],"req":[]}');}catch(e){R={rt:[],dg:[],rs:[],req:[]};}
+
+    // Re-renderizar TODAS las pestañas (los datos cambiaron remotamente)
     renderRT();renderDG();renderRS();renderREQ();updateBell();
-    fbSetStatus('err','⚠️ Sin conexión — datos locales','');
+    _fbReady = true;
+    fbSetStatus('ok','🔄 Datos recibidos',new Date().toLocaleTimeString('es-EC'));
+
+  }, ()=>{
+    fbSetStatus('err','⚠️ Sin conexión — modo local','');
   });
 
-  // Semanas: tiempo real
+  // ── Semanas en tiempo real ─────────────────────────────────────────────────
   REF_WK.on('value', snap=>{
-    const val=snap.val();WK=val?Object.values(val):[];
+    if(_writing) return;
+    const val=snap.val(); WK=val?Object.values(val):[];
     try{localStorage.setItem('dw',JSON.stringify(WK));}catch(e){}
     const cons=document.getElementById('mp-cons');
     if(cons&&cons.style.display!=='none') renderConsWeeks();
   }, ()=>{try{WK=JSON.parse(localStorage.getItem('dw')||'[]');}catch(e){WK=[];}});
 
-  // Proveedores: solo una vez (no cambian frecuente)
-  REF_PV.once('value').then(snap=>{const val=snap.val();PV=val||{};const pc=Object.keys(PV).length;if(pc){const el=document.getElementById('pst');if(el)el.textContent='✅ '+pc+' proveedores';}}).catch(()=>{try{PV=JSON.parse(localStorage.getItem('dp')||'{}');}catch(e){PV={};}});
+  // ── Estado de conexión Firebase ───────────────────────────────────────────
+  db.ref('.info/connected').on('value', snap=>{
+    if(snap.val()===true){
+      fbSetStatus('ok','✅ En línea',new Date().toLocaleTimeString('es-EC'));
+    } else {
+      fbSetStatus('err','⚠️ Sin conexión','');
+    }
+  });
 
-  // Presencia: mostrar usuarios activos
-  const DEV_ID=localStorage.getItem('dep_dev_id')||(()=>{const id='u_'+Math.random().toString(36).slice(2,7);localStorage.setItem('dep_dev_id',id);return id;})();
+  // ── Proveedores ────────────────────────────────────────────────────────────
+  REF_PV.once('value').then(snap=>{
+    const val=snap.val();PV=val||{};
+    const pc=Object.keys(PV).length;
+    if(pc){const el=document.getElementById('pst');if(el)el.textContent='✅ '+pc+' proveedores';}
+  }).catch(()=>{try{PV=JSON.parse(localStorage.getItem('dp')||'{}');}catch(e){PV={};}});
+
+  // ── Presencia: usuarios en línea ───────────────────────────────────────────
+  const DEV_ID=localStorage.getItem('dep_dev_id')||(()=>{
+    const id='u_'+Math.random().toString(36).slice(2,7);
+    localStorage.setItem('dep_dev_id',id);return id;
+  })();
   const presRef=db.ref('presence/'+DEV_ID);
-  presRef.set({ts:Date.now(),ua:navigator.userAgent.slice(0,30)});
+  presRef.set({ts:Date.now(),ua:navigator.userAgent.slice(0,40)});
+  presRef.onDisconnect().remove(); // Firebase elimina la presencia al desconectar
   window.addEventListener('beforeunload',()=>presRef.remove());
   db.ref('presence').on('value',snap=>{
     const n=Object.keys(snap.val()||{}).length;
     const el=document.getElementById('fb-users-count');
-    if(el)el.textContent=n>1?`👥 ${n} usuarios en línea`:'';
+    if(el)el.textContent=n>1?`👥 ${n} en línea`:'';
   });
 }
 function sR(){
-  const now=new Date().toLocaleString('es-EC');
+  // Guardar localmente de inmediato (sin esperar red)
+  try{localStorage.setItem('dr',JSON.stringify(R));}catch(e){}
+
+  // Activar flag para que el listener ignore el echo de nuestra escritura
+  _writing = true;
+  clearTimeout(_writeTimer);
+  _writeTimer = setTimeout(()=>{ _writing=false; }, 2000);
+
+  const now=new Date().toLocaleTimeString('es-EC');
   REF_R.set({rt:toFbObj(R.rt),dg:toFbObj(R.dg),rs:toFbObj(R.rs),req:toFbObj(R.req)})
-    .then(()=>{fbSetStatus('ok','✅ Guardado',now);try{localStorage.setItem('dr',JSON.stringify(R));}catch(e){}})
-    .catch(()=>{fbSetStatus('err','⚠️ Error al guardar','');try{localStorage.setItem('dr',JSON.stringify(R));}catch(e){}});
+    .then(()=>{
+      fbSetStatus('ok','✅ Guardado',now);
+      // Apagar flag un poco después de confirmar escritura
+      clearTimeout(_writeTimer);
+      _writeTimer = setTimeout(()=>{ _writing=false; }, 800);
+    })
+    .catch(()=>{
+      _writing=false;
+      fbSetStatus('err','⚠️ Sin conexión — guardado local','');
+    });
 }
 function sW(){REF_WK.set(toFbObj(WK)).catch(()=>{try{localStorage.setItem('dw',JSON.stringify(WK));}catch(e){}});}
 function fbSync(){
   fbSetStatus('wait','⏳ Sincronizando...');
-  // Con on('value') los datos ya se actualizan automáticamente.
-  // Forzamos una lectura puntual para confirmar y mostrar toast.
+  _writing = false; // forzar recepción de datos
   REF_R.once('value').then(snap=>{
     const val=snap.val();
     if(val){R.rt=val.rt?Object.values(val.rt):[];R.dg=val.dg?Object.values(val.dg):[];R.rs=val.rs?Object.values(val.rs):[];R.req=val.req?Object.values(val.req):[];}
+    try{localStorage.setItem('dr',JSON.stringify(R));}catch(e){}
     renderRT();renderDG();renderRS();renderREQ();updateBell();
-    fbSetStatus('ok','✅ Sincronizado',new Date().toLocaleString('es-EC'));showT('🔄 Datos actualizados');
-  }).catch(()=>{fbSetStatus('err','⚠️ Sin conexión','');showT('⚠️ No se pudo conectar');});
-  REF_WK.once('value').then(snap=>{const val=snap.val();WK=val?Object.values(val):[];});
+    fbSetStatus('ok','✅ Sincronizado',new Date().toLocaleTimeString('es-EC'));
+    showT('🔄 Datos actualizados desde la nube');
+  }).catch(()=>{fbSetStatus('err','⚠️ Sin conexión','');showT('⚠️ No se pudo conectar a Firebase');});
+  REF_WK.once('value').then(snap=>{const val=snap.val();if(val)WK=Object.values(val);});
 }
 
 // ─────────────────────────────────────────────
